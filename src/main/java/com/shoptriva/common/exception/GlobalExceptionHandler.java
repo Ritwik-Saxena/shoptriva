@@ -125,4 +125,16 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(CartItemNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleCartItemNotFound(
+            CartItemNotFoundException ex,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "CART_ITEM_NOT_FOUND",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
 }
