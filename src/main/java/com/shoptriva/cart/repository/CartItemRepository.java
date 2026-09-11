@@ -14,6 +14,11 @@ public interface CartItemRepository
             Long productId
     );
 
+    Optional<CartItem> findByIdAndCartId(
+            Long id,
+            Long cartId
+    );
+
     List<CartItem> findByCartId(Long cartId);
 
     void deleteByCartId(Long cartId);
