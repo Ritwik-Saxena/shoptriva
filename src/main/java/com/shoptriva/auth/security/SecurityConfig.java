@@ -86,11 +86,12 @@ public class SecurityConfig {
                         ).hasRole("ADMIN")
 
                         // Future admin APIs
-                        .requestMatchers(
-                                "/api/admin/**"
-                        ).hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("ADMIN")
 
-                        // Any other API requires login
+                        .requestMatchers("/api/cart/**")
+                        .hasRole("CUSTOMER")
+
                         .anyRequest()
                         .authenticated()
                 )
