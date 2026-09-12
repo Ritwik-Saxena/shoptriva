@@ -137,4 +137,16 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(WishlistItemNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleWishlistItemNotFound(
+            WishlistItemNotFoundException ex,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "WISHLIST_ITEM_NOT_FOUND",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
 }
