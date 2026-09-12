@@ -85,13 +85,18 @@ public class SecurityConfig {
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Future admin APIs
+                        // Admin-only APIs
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
 
+                        // Customer-only APIs
                         .requestMatchers("/api/cart/**")
                         .hasRole("CUSTOMER")
 
+                        .requestMatchers("/api/wishlist/**")
+                        .hasRole("CUSTOMER")
+
+                        // Any future endpoint must at least be authenticated
                         .anyRequest()
                         .authenticated()
                 )
