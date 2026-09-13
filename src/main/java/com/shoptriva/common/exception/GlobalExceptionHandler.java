@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import java.time.LocalDateTime;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -146,6 +147,61 @@ public class GlobalExceptionHandler {
                 HttpStatus.NOT_FOUND,
                 "WISHLIST_ITEM_NOT_FOUND",
                 ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+    @ExceptionHandler(InventoryNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleInventoryNotFound(
+            InventoryNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "INVENTORY_NOT_FOUND",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(DuplicateInventoryException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateInventory(
+            DuplicateInventoryException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "DUPLICATE_INVENTORY",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<ApiErrorResponse> handleInsufficientStock(
+            InsufficientStockException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "INSUFFICIENT_STOCK",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLockingFailure(
+            ObjectOptimisticLockingFailureException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "CONCURRENT_UPDATE_CONFLICT",
+                "Inventory was modified by another request. Please retry.",
                 request.getRequestURI()
         );
     }

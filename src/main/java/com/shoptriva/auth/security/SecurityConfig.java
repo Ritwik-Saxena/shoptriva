@@ -17,33 +17,33 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
-
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
+            HttpSecurity http
+    ) throws Exception {
 
         http
-                // We are using JWT, so CSRF is not needed here
+
+                // JWT API → CSRF protection not required
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Disable default login page
+                // Disable Spring's default login page
                 .formLogin(AbstractHttpConfigurer::disable)
 
-                // Disable browser popup/basic authentication
+                // Disable HTTP Basic authentication
                 .httpBasic(AbstractHttpConfigurer::disable)
 
-                // JWT means server does not maintain session
+                // Do not create server-side sessions
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
 
-                // Our custom JSON 401 / 403 handlers
+                // Custom JSON responses for 401 and 403
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
@@ -52,56 +52,116 @@ public class SecurityConfig {
                 // Authorization rules
                 .authorizeHttpRequests(auth -> auth
 
-                        // Public authentication APIs
+                        // =====================================================
+                        // PUBLIC APIs
+                        // =====================================================
+
+                        // Authentication APIs
                         .requestMatchers(
                                 "/api/auth/**"
                         ).permitAll()
 
-                        // Anyone can view products/categories
+                        // Anyone can view products and categories
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/products/**",
                                 "/api/categories/**"
                         ).permitAll()
 
-                        // Only ADMIN can create
+
+                        // =====================================================
+                        // ADMIN - PRODUCT / CATEGORY MANAGEMENT
+                        // =====================================================
+
+                        // Create products/categories
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/products/**",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Only ADMIN can update
+                        // Update products/categories
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/products/**",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Only ADMIN can delete
+                        // Delete products/categories
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/products/**",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Admin-only APIs
-                        .requestMatchers("/api/admin/**")
-                        .hasRole("ADMIN")
 
-                        // Customer-only APIs
-                        .requestMatchers("/api/cart/**")
-                        .hasRole("CUSTOMER")
+                        // =====================================================
+                        // ADMIN APIs
+                        // =====================================================
 
-                        .requestMatchers("/api/wishlist/**")
-                        .hasRole("CUSTOMER")
+                        .requestMatchers(
+                                "/api/admin/**"
+                        ).hasRole("ADMIN")
 
-                        // Any future endpoint must at least be authenticated
+
+                        // =====================================================
+                        // CUSTOMER APIs
+                        // =====================================================
+
+                        // Cart belongs only to customers
+                        .requestMatchers(
+                                "/api/cart/**"
+                        ).hasRole("CUSTOMER")
+
+                        // Wishlist belongs only to customers
+                        .requestMatchers(
+                                "/api/wishlist/**"
+                        ).hasRole("CUSTOMER")
+
+
+                        // =====================================================
+                        // INVENTORY APIs
+                        // =====================================================
+
+                        // CUSTOMER and ADMIN can view inventory
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/inventory/**"
+                        ).hasAnyRole(
+                                "CUSTOMER",
+                                "ADMIN"
+                        )
+
+                        // Only ADMIN can create inventory
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/inventory/**"
+                        ).hasRole("ADMIN")
+
+                        // Only ADMIN can set exact stock
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/inventory/**"
+                        ).hasRole("ADMIN")
+
+                        // Only ADMIN can increase/decrease stock
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/inventory/**"
+                        ).hasRole("ADMIN")
+
+
+                        // =====================================================
+                        // FALLBACK
+                        // =====================================================
+
+                        // Any endpoint not matched above requires authentication
                         .anyRequest()
                         .authenticated()
                 )
 
-                // Run our JWT filter before Spring's username/password filter
+                // JWT authentication must run before Spring's
+                // username/password authentication filter
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
