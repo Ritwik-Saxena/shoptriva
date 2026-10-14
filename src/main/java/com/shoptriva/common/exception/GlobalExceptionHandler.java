@@ -232,4 +232,17 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(CheckoutException.class)
+    public ResponseEntity<ApiErrorResponse> handleCheckoutException(
+            CheckoutException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "CHECKOUT_ERROR",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
 }
