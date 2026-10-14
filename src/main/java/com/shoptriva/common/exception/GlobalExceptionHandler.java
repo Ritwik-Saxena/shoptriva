@@ -219,4 +219,17 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(ReservationConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleReservationConflict(
+            ReservationConflictException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "RESERVATION_CONFLICT",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
 }
