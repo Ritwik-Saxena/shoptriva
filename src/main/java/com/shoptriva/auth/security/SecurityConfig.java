@@ -1,3 +1,4 @@
+
 package com.shoptriva.auth.security;
 
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,10 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-                // Stateless JWT authentication
+                // =====================================
+                // STATELESS JWT AUTHENTICATION
+                // =====================================
+
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -39,11 +43,22 @@ public class SecurityConfig {
                         )
                 )
 
-                // Custom JSON responses for 401 and 403
+                // =====================================
+                // CUSTOM 401 AND 403 ERROR HANDLING
+                // =====================================
+
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(authenticationEntryPoint)
-                        .accessDeniedHandler(accessDeniedHandler)
+                        .authenticationEntryPoint(
+                                authenticationEntryPoint
+                        )
+                        .accessDeniedHandler(
+                                accessDeniedHandler
+                        )
                 )
+
+                // =====================================
+                // ENDPOINT AUTHORIZATION RULES
+                // =====================================
 
                 .authorizeHttpRequests(auth -> auth
 
@@ -56,10 +71,11 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).permitAll()
-
 
                         // =====================================
                         // ADMIN - CATALOG MANAGEMENT
@@ -67,22 +83,35 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
                         .requestMatchers(
                                 HttpMethod.PUT,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
                         .requestMatchers(
                                 HttpMethod.DELETE,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
+                        // Deny unsupported catalog operations
+                        .requestMatchers(
+                                "/api/products",
+                                "/api/products/**",
+                                "/api/categories",
+                                "/api/categories/**"
+                        ).denyAll()
 
                         // =====================================
                         // ADMIN APIs
@@ -91,63 +120,100 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
 
+                        // =====================================
+                        // CUSTOMER - CART
+                        // =====================================
+
+                        .requestMatchers(
+                                "/api/cart",
+                                "/api/cart/**"
+                        ).hasRole("CUSTOMER")
 
                         // =====================================
-                        // CUSTOMER APIs
+                        // CUSTOMER - WISHLIST
                         // =====================================
 
-                        .requestMatchers("/api/cart/**")
-                        .hasRole("CUSTOMER")
+                        .requestMatchers(
+                                "/api/wishlist",
+                                "/api/wishlist/**"
+                        ).hasRole("CUSTOMER")
 
-                        .requestMatchers("/api/wishlist/**")
-                        .hasRole("CUSTOMER")
+                        // =====================================
+                        // CUSTOMER - ORDERS
+                        // =====================================
 
-                        // Customer order history and details
                         .requestMatchers(
                                 "/api/orders",
                                 "/api/orders/**"
                         ).hasRole("CUSTOMER")
 
-
                         // =====================================
-                        // INVENTORY - READ
-                        // =====================================
-
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/inventory/**"
-                        ).hasAnyRole("CUSTOMER", "ADMIN")
-
-
-                        // =====================================
-                        // INVENTORY - ADMIN MANAGEMENT
+                        // CUSTOMER - CHECKOUT
                         // =====================================
 
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/checkout"
+                        ).hasRole("CUSTOMER")
+
+                        // Reject other checkout operations
+                        .requestMatchers(
+                                "/api/checkout",
+                                "/api/checkout/**"
+                        ).denyAll()
+
+                        // =====================================
+                        // INVENTORY - READ
+                        // CUSTOMER + ADMIN
+                        // =====================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/inventory",
+                                "/api/inventory/**"
+                        ).hasAnyRole("CUSTOMER", "ADMIN")
+
+                        // =====================================
+                        // INVENTORY - WRITE
+                        // ADMIN ONLY
+                        // =====================================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
                         .requestMatchers(
                                 HttpMethod.PUT,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
                         .requestMatchers(
                                 HttpMethod.PATCH,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
+                        // Reject all other inventory operations
+                        .requestMatchers(
+                                "/api/inventory",
+                                "/api/inventory/**"
+                        ).denyAll()
 
                         // =====================================
-                        // FALLBACK
+                        // FALLBACK - AUTHENTICATED USERS
                         // =====================================
 
                         .anyRequest()
                         .authenticated()
                 )
 
-                // Authenticate JWT before username/password filter
+                // =====================================
+                // JWT FILTER
+                // =====================================
+
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
