@@ -17,4 +17,9 @@ public interface OrderRepository
             Long orderId,
             Long userId
     );
+
+    Optional<Order> findByUserIdAndCheckoutKey(
+            Long userId,
+            String checkoutKey
+    );
 }

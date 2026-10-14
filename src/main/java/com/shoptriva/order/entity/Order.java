@@ -10,7 +10,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(
+        name = "orders",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_orders_user_checkout_key",
+                        columnNames = {"user_id", "checkout_key"}
+                )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -32,6 +40,14 @@ public class Order extends BaseEntity {
     )
     private User user;
 
+    @Column(
+            name = "checkout_key",
+            nullable = false,
+            length = 36,
+            updatable = false
+    )
+    private String checkoutKey;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
@@ -43,6 +59,9 @@ public class Order extends BaseEntity {
             scale = 2
     )
     private BigDecimal totalAmount;
+
+    @Version
+    private Long version;
 
     @OneToMany(
             mappedBy = "order",
