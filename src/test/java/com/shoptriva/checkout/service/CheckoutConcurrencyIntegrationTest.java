@@ -137,7 +137,7 @@ class CheckoutConcurrencyIntegrationTest {
             assertThat(inventory.getAvailableQuantity()).isEqualTo(1);
             assertThat(inventory.getVersion()).isEqualTo(initialVersion);
             assertThat(jdbcTemplate.queryForObject("select @@transaction_isolation", String.class))
-                    .isEqualTo("REPEATABLE-READ");
+                    .isEqualTo("READ-COMMITTED");
             reads.add(new InventoryRead(Thread.currentThread().threadId(),
                     jdbcTemplate.queryForObject("select connection_id()", Long.class)));
             bothReadLastUnit.await(15, TimeUnit.SECONDS);

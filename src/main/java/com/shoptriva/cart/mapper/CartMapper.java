@@ -4,6 +4,7 @@ import com.shoptriva.cart.dto.CartItemResponse;
 import com.shoptriva.cart.dto.CartResponse;
 import com.shoptriva.cart.entity.Cart;
 import com.shoptriva.cart.entity.CartItem;
+import com.shoptriva.common.exception.QuantityLimitException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -39,7 +40,7 @@ public final class CartMapper {
 
         int totalItems = items.stream()
                 .mapToInt(CartItem::getQuantity)
-                .sum();
+                .reduce(0, QuantityLimitException::add);
 
         BigDecimal totalAmount = itemResponses.stream()
                 .map(CartItemResponse::getSubtotal)

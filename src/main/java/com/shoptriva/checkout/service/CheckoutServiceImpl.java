@@ -1,6 +1,7 @@
 package com.shoptriva.checkout.service;
 
 import com.shoptriva.auth.entity.User;
+import com.shoptriva.auth.repository.UserRepository;
 import com.shoptriva.auth.service.CurrentUserService;
 import com.shoptriva.cart.entity.Cart;
 import com.shoptriva.cart.entity.CartItem;
@@ -16,6 +17,7 @@ import com.shoptriva.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -27,7 +29,9 @@ import java.util.UUID;
 public class CheckoutServiceImpl implements CheckoutService {
 
     private static final long RESERVATION_MINUTES = 15;
+    private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999.99");
 
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
@@ -35,7 +39,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final StockReservationService reservationService;
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public OrderResponse checkout(String idempotencyKey) {
 
         // STEP 1: Validate the idempotency key
@@ -44,6 +48,10 @@ public class CheckoutServiceImpl implements CheckoutService {
         // STEP 2: Identify authenticated customer
         User user = currentUserService.getCurrentUser();
         Long userId = user.getId();
+
+        // All cart writers acquire this customer mutex before accessing cart rows.
+        // READ_COMMITTED keeps post-wait reads current even after the user lookup.
+        userRepository.lockForCartWrite(userId);
 
         // STEP 3: Return existing order for retry
         var existing = orderRepository
@@ -105,8 +113,7 @@ public class CheckoutServiceImpl implements CheckoutService {
 
             BigDecimal unitPrice = product.getPrice();
 
-            if (unitPrice == null ||
-                    unitPrice.signum() < 0) {
+            if (!fitsAmountColumn(unitPrice)) {
 
                 throw new CheckoutException(
                         "Invalid product price"
@@ -116,6 +123,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             BigDecimal lineTotal = unitPrice.multiply(
                     BigDecimal.valueOf(quantity)
             );
+            if (!fitsAmountColumn(lineTotal)) {
+                throw new CheckoutException("Order item total exceeds the supported monetary limit");
+            }
 
             OrderItem orderItem = OrderItem.builder()
                     .product(product)
@@ -128,6 +138,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             order.addItem(orderItem);
 
             totalAmount = totalAmount.add(lineTotal);
+            if (!fitsAmountColumn(totalAmount)) {
+                throw new CheckoutException("Order total exceeds the supported monetary limit");
+            }
         }
 
         order.setTotalAmount(totalAmount);
@@ -157,6 +170,11 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         // STEP 13: Return saved order
         return OrderMapper.toResponse(savedOrder);
+    }
+
+    private boolean fitsAmountColumn(BigDecimal amount) {
+        return amount != null && amount.signum() >= 0
+                && amount.scale() <= 2 && amount.compareTo(MAX_AMOUNT) <= 0;
     }
 
     private String validateCheckoutKey(String key) {

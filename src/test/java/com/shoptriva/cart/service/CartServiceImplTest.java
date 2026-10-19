@@ -2,6 +2,7 @@ package com.shoptriva.cart.service;
 
 import com.shoptriva.auth.entity.Role;
 import com.shoptriva.auth.entity.User;
+import com.shoptriva.auth.repository.UserRepository;
 import com.shoptriva.auth.service.CurrentUserService;
 import com.shoptriva.cart.dto.AddToCartRequest;
 import com.shoptriva.cart.dto.CartResponse;
@@ -30,6 +31,9 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CartServiceImplTest {
+
+    @Mock
+    private UserRepository userRepository;
 
     @Mock
     private CartRepository cartRepository;

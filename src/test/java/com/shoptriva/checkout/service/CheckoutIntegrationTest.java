@@ -11,6 +11,13 @@ import com.shoptriva.catalog.entity.Product;
 import com.shoptriva.checkout.entity.ReservationStatus;
 import com.shoptriva.checkout.repository.StockReservationRepository;
 import com.shoptriva.common.exception.InsufficientStockException;
+import com.shoptriva.common.exception.CheckoutException;
+import com.shoptriva.common.exception.QuantityLimitException;
+import com.shoptriva.cart.service.CartService;
+import com.shoptriva.cart.dto.AddToCartRequest;
+import com.shoptriva.cart.dto.UpdateCartItemRequest;
+import com.shoptriva.inventory.service.InventoryService;
+import com.shoptriva.inventory.dto.StockAdjustmentRequest;
 import com.shoptriva.inventory.entity.Inventory;
 import com.shoptriva.inventory.repository.InventoryRepository;
 import com.shoptriva.order.dto.OrderResponse;
@@ -22,6 +29,8 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -50,6 +59,80 @@ import static org.mockito.Mockito.doAnswer;
 @ActiveProfiles("test")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class CheckoutIntegrationTest {
+
+    @Autowired private CartService cartService;
+    @Autowired private InventoryService inventoryService;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"9999999999.99", "3000000000.00"})
+    void checkout_shouldRejectLineOrOrderOverflowWithoutSideEffects(String price) {
+        transactions.executeWithoutResult(status -> productIds.forEach(id ->
+                entityManager.find(Product.class, id).setPrice(new BigDecimal(price))));
+        long orders = orderRepository.count();
+        long items = orderItemRepository.count();
+        long reservations = reservationRepository.count();
+        List<Long> versions = inventoryVersions();
+
+        assertThatThrownBy(() -> checkoutService.checkout(checkoutKey))
+                .isInstanceOf(CheckoutException.class)
+                .hasMessageContaining(price.startsWith("999") ? "Order item total" : "Order total");
+
+        assertThat(orderRepository.count()).isEqualTo(orders);
+        assertThat(orderItemRepository.count()).isEqualTo(items);
+        assertThat(reservationRepository.count()).isEqualTo(reservations);
+        assertThat(inventoryVersions()).isEqualTo(versions);
+        transactions.executeWithoutResult(status -> {
+            assertStock(10, 10);
+            assertThat(cartItemRepository.findByCartId(cartId)).hasSize(2)
+                    .allSatisfy(item -> assertThat(item.getQuantity()).isEqualTo(2));
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"item-add", "total-add", "total-update"})
+    void cart_shouldRollBackQuantityOverflow(String operation) {
+        Long firstItemId = transactions.execute(status -> {
+            List<CartItem> items = cartItemRepository.findByCartId(cartId);
+            CartItem first = items.stream().filter(item -> item.getProduct().getId().equals(productIds.get(0)))
+                    .findFirst().orElseThrow();
+            first.setQuantity(operation.equals("item-add") ? Integer.MAX_VALUE : Integer.MAX_VALUE - 2);
+            if (operation.equals("item-add")) {
+                items.stream().filter(item -> item != first).forEach(entityManager::remove);
+            }
+            return first.getId();
+        });
+        var quantities = jdbcTemplate.queryForList(
+                "select quantity from cart_items where cart_id = ? order by id", Integer.class, cartId);
+        assertThatThrownBy(() -> {
+            if (operation.equals("total-update")) {
+                UpdateCartItemRequest request = new UpdateCartItemRequest();
+                request.setQuantity(Integer.MAX_VALUE - 1);
+                cartService.updateItemQuantity(firstItemId, request);
+            } else {
+                AddToCartRequest request = new AddToCartRequest();
+                request.setProductId(productIds.get(0));
+                request.setQuantity(1);
+                cartService.addItem(request);
+            }
+        }).isInstanceOf(QuantityLimitException.class);
+        assertThat(jdbcTemplate.queryForList(
+                "select quantity from cart_items where cart_id = ? order by id", Integer.class, cartId))
+                .isEqualTo(quantities);
+    }
+
+    @Test
+    void inventory_shouldRollBackOverflowWithoutVersionChange() {
+        transactions.executeWithoutResult(status -> inventoryRepository.findByProductId(productIds.get(0))
+                .orElseThrow().setAvailableQuantity(Integer.MAX_VALUE));
+        List<Long> versions = inventoryVersions();
+        StockAdjustmentRequest request = new StockAdjustmentRequest();
+        request.setQuantity(1);
+
+        assertThatThrownBy(() -> inventoryService.increaseStock(productIds.get(0), request))
+                .isInstanceOf(QuantityLimitException.class);
+        assertThat(inventoryVersions()).isEqualTo(versions);
+        transactions.executeWithoutResult(status -> assertStock(Integer.MAX_VALUE, 10));
+    }
 
     @Autowired
     private CheckoutService checkoutService;

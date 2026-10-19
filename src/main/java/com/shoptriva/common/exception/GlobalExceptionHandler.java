@@ -13,6 +13,13 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(QuantityLimitException.class)
+    public ResponseEntity<ApiErrorResponse> handleQuantityLimit(
+            QuantityLimitException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(ProductNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleProductNotFound(
             ProductNotFoundException ex,

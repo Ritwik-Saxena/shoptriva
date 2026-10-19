@@ -2,6 +2,7 @@
 package com.shoptriva.checkout.service;
 
 import com.shoptriva.auth.entity.User;
+import com.shoptriva.auth.repository.UserRepository;
 import com.shoptriva.auth.service.CurrentUserService;
 import com.shoptriva.cart.entity.Cart;
 import com.shoptriva.cart.entity.CartItem;
@@ -18,6 +19,8 @@ import com.shoptriva.order.repository.OrderRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.mockito.ArgumentCaptor;
@@ -36,6 +39,9 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CheckoutServiceImplTest {
+
+    @Mock
+    private UserRepository userRepository;
 
     private static final String CHECKOUT_KEY =
             "6a02f101-5a19-44a4-91d8-6762fa390b10";
@@ -62,6 +68,31 @@ class CheckoutServiceImplTest {
     private Cart cart;
     private Product product;
     private CartItem cartItem;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.001", "10000000000.00", "-0.01"})
+    void checkout_shouldRejectPriceOutsideColumnLimits(String price) {
+        product.setPrice(new BigDecimal(price));
+        when(currentUserService.getCurrentUser()).thenReturn(user);
+        when(cartRepository.findForCheckoutByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartId(10L)).thenReturn(List.of(cartItem));
+
+        assertThatThrownBy(() -> checkoutService.checkout(CHECKOUT_KEY))
+                .isInstanceOf(CheckoutException.class).hasMessage("Invalid product price");
+        verify(orderRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    void checkout_shouldAcceptExactMaximumMonetaryAmount() {
+        product.setPrice(new BigDecimal("9999999999.99"));
+        cartItem.setQuantity(1);
+        mockFreshCheckout();
+
+        assertThat(checkoutService.checkout(CHECKOUT_KEY).getTotalAmount())
+                .isEqualByComparingTo("9999999999.99");
+        verify(orderRepository).saveAndFlush(any());
+    }
 
     @BeforeEach
     void setUp() {

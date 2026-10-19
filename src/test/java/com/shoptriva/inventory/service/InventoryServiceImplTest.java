@@ -4,6 +4,7 @@ import com.shoptriva.catalog.entity.Product;
 import com.shoptriva.catalog.repository.ProductRepository;
 import com.shoptriva.common.exception.DuplicateInventoryException;
 import com.shoptriva.common.exception.InsufficientStockException;
+import com.shoptriva.common.exception.QuantityLimitException;
 import com.shoptriva.inventory.dto.CreateInventoryRequest;
 import com.shoptriva.inventory.dto.InventoryResponse;
 import com.shoptriva.inventory.dto.StockAdjustmentRequest;
@@ -39,6 +40,31 @@ class InventoryServiceImplTest {
 
     private Product product;
     private Inventory inventory;
+
+    @Test
+    void increaseStock_shouldRejectOverflowWithoutChangingInventory() {
+        inventory.setAvailableQuantity(Integer.MAX_VALUE);
+        when(inventoryRepository.findByProductId(1L)).thenReturn(Optional.of(inventory));
+        StockAdjustmentRequest request = new StockAdjustmentRequest();
+        request.setQuantity(1);
+
+        assertThatThrownBy(() -> inventoryService.increaseStock(1L, request))
+                .isInstanceOf(QuantityLimitException.class);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(Integer.MAX_VALUE);
+        verify(inventoryRepository, never()).flush();
+    }
+
+    @Test
+    void increaseStock_shouldAcceptMaximumIntegerQuantity() {
+        inventory.setAvailableQuantity(Integer.MAX_VALUE - 1);
+        when(inventoryRepository.findByProductId(1L)).thenReturn(Optional.of(inventory));
+        StockAdjustmentRequest request = new StockAdjustmentRequest();
+        request.setQuantity(1);
+
+        assertThat(inventoryService.increaseStock(1L, request).getAvailableQuantity())
+                .isEqualTo(Integer.MAX_VALUE);
+        verify(inventoryRepository).flush();
+    }
 
     @BeforeEach
     void setUp() {
