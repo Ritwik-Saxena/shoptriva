@@ -6,13 +6,17 @@ import com.shoptriva.checkout.repository.StockReservationRepository;
 import com.shoptriva.common.exception.InsufficientStockException;
 import com.shoptriva.common.exception.InventoryNotFoundException;
 import com.shoptriva.common.exception.ReservationConflictException;
+import com.shoptriva.common.exception.OrderNotFoundException;
+import com.shoptriva.common.exception.QuantityLimitException;
 import com.shoptriva.inventory.entity.Inventory;
 import com.shoptriva.inventory.repository.InventoryRepository;
 import com.shoptriva.order.entity.Order;
 import com.shoptriva.order.entity.OrderStatus;
+import com.shoptriva.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,6 +28,7 @@ public class StockReservationServiceImpl
 
     private final StockReservationRepository reservationRepository;
     private final InventoryRepository inventoryRepository;
+    private final OrderRepository orderRepository;
 
     // ==================================================
     // 1. RESERVE STOCK
@@ -51,6 +56,13 @@ public class StockReservationServiceImpl
             throw new ReservationConflictException(
                     "Reservation quantity must be positive"
             );
+        }
+
+        // Checkout already owns this newly inserted order's lock. Other callers
+        // must not append a reservation to an order that has been cancelled.
+        order = lockOrder(order.getId());
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new ReservationConflictException("A saved PENDING order is required");
         }
 
         if (expiresAt == null
@@ -118,8 +130,13 @@ public class StockReservationServiceImpl
     // ==================================================
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void commitForOrder(Long orderId) {
+
+        Order order = lockOrder(orderId);
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new ReservationConflictException("Cancelled order reservations cannot be committed");
+        }
 
         List<StockReservation> reservations =
                 getReservationsOrThrow(orderId);
@@ -132,6 +149,10 @@ public class StockReservationServiceImpl
 
         if (allCommitted) {
             return;
+        }
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new ReservationConflictException("Order reservations cannot be committed");
         }
 
         Instant now = Instant.now();
@@ -170,7 +191,7 @@ public class StockReservationServiceImpl
     // ==================================================
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void releaseForOrder(
             Long orderId,
             ReservationStatus finalStatus
@@ -184,6 +205,7 @@ public class StockReservationServiceImpl
             );
         }
 
+        Order order = lockOrder(orderId);
         List<StockReservation> reservations =
                 getReservationsOrThrow(orderId);
 
@@ -193,6 +215,10 @@ public class StockReservationServiceImpl
         // Idempotent: do not restore stock twice
         if (alreadyReleased) {
             return;
+        }
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new ReservationConflictException("Only pending orders can release reservations");
         }
 
         Instant now = Instant.now();
@@ -217,12 +243,39 @@ public class StockReservationServiceImpl
             }
         }
 
+        restoreStock(order, reservations, finalStatus);
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 30)
+    public boolean expireForOrder(Long orderId) {
+        Order order = lockOrder(orderId);
+        if (order.getStatus() != OrderStatus.PENDING) return false;
+
+        List<StockReservation> reservations = getReservationsOrThrow(orderId);
+        Instant now = Instant.now();
+        if (reservations.stream().anyMatch(reservation ->
+                reservation.getStatus() != ReservationStatus.RESERVED
+                        || reservation.getExpiresAt().isAfter(now))) {
+            return false;
+        }
+
+        restoreStock(order, reservations, ReservationStatus.EXPIRED);
+        return true;
+    }
+
+    private Order lockOrder(Long orderId) {
+        return orderRepository.findForReservationUpdate(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+    }
+
+    private void restoreStock(Order order, List<StockReservation> reservations,
+                              ReservationStatus finalStatus) {
+        // Consistent inventory order reduces contention between multi-product orders.
+        reservations.sort(java.util.Comparator.comparing(r -> r.getInventory().getId()));
         for (StockReservation reservation : reservations) {
-
-            Inventory inventory =
-                    reservation.getInventory();
-
-            int restoredQuantity = Math.addExact(
+            Inventory inventory = reservation.getInventory();
+            int restoredQuantity = QuantityLimitException.add(
                     inventory.getAvailableQuantity(),
                     reservation.getQuantity()
             );
@@ -234,7 +287,8 @@ public class StockReservationServiceImpl
             reservation.setStatus(finalStatus);
         }
 
-        // Hibernate flushes all pending entity changes.
+        order.setStatus(OrderStatus.CANCELLED);
+        // Hibernate flushes all pending entity changes, including the order.
         // @Version protects both Inventory and reservations.
         reservationRepository.flush();
     }

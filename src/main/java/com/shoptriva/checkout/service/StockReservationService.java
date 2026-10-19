@@ -17,6 +17,8 @@ public interface StockReservationService {
 
     void commitForOrder(Long orderId);
 
+    boolean expireForOrder(Long orderId);
+
     void releaseForOrder(
             Long orderId,
             ReservationStatus finalStatus

@@ -11,6 +11,7 @@ import java.time.Instant;
 @Entity
 @Table(
         name = "stock_reservations",
+        indexes = @Index(name = "idx_reservation_expiry", columnList = "status,expires_at,order_id"),
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "uk_reservation_order_inventory",
