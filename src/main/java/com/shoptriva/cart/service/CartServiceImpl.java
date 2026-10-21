@@ -1,6 +1,8 @@
 package com.shoptriva.cart.service;
 
 import com.shoptriva.auth.entity.User;
+import com.shoptriva.auth.repository.UserRepository;
+import com.shoptriva.common.exception.QuantityLimitException;
 import com.shoptriva.auth.service.CurrentUserService;
 import com.shoptriva.cart.dto.AddToCartRequest;
 import com.shoptriva.cart.dto.CartResponse;
@@ -17,6 +19,7 @@ import com.shoptriva.common.exception.ProductNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -26,6 +29,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class CartServiceImpl implements CartService {
 
+    private final UserRepository userRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
@@ -42,10 +46,11 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponse addItem(AddToCartRequest request) {
 
         User user = currentUserService.getCurrentUser();
+        userRepository.lockForCartWrite(user.getId());
 
         Cart cart = getOrCreateCart(user);
 
@@ -75,8 +80,7 @@ public class CartServiceImpl implements CartService {
         } else {
 
             cartItem.setQuantity(
-                    cartItem.getQuantity()
-                            + request.getQuantity()
+                    QuantityLimitException.add(cartItem.getQuantity(), request.getQuantity())
             );
         }
 
@@ -86,12 +90,13 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponse updateItemQuantity(
             Long itemId,
             UpdateCartItemRequest request) {
 
         Long userId = currentUserService.getCurrentUserId();
+        userRepository.lockForCartWrite(userId);
 
         Cart cart = cartRepository
                 .findByUserId(userId)
@@ -116,10 +121,11 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponse removeItem(Long itemId) {
 
         Long userId = currentUserService.getCurrentUserId();
+        userRepository.lockForCartWrite(userId);
 
         Cart cart = cartRepository
                 .findByUserId(userId)
@@ -142,10 +148,11 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public CartResponse clearCart() {
 
         Long userId = currentUserService.getCurrentUserId();
+        userRepository.lockForCartWrite(userId);
 
         return cartRepository
                 .findByUserId(userId)

@@ -1,5 +1,7 @@
 package com.shoptriva.inventory.service;
 
+import com.shoptriva.common.exception.QuantityLimitException;
+
 import com.shoptriva.catalog.entity.Product;
 import com.shoptriva.catalog.repository.ProductRepository;
 import com.shoptriva.common.exception.DuplicateInventoryException;
@@ -109,8 +111,7 @@ public class InventoryServiceImpl implements InventoryService {
                 getInventoryOrThrow(productId);
 
         int updatedQuantity =
-                inventory.getAvailableQuantity()
-                        + request.getQuantity();
+                QuantityLimitException.add(inventory.getAvailableQuantity(), request.getQuantity());
 
         inventory.setAvailableQuantity(updatedQuantity);
 

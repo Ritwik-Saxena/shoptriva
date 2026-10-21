@@ -13,6 +13,13 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(QuantityLimitException.class)
+    public ResponseEntity<ApiErrorResponse> handleQuantityLimit(
+            QuantityLimitException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(ProductNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleProductNotFound(
             ProductNotFoundException ex,
@@ -202,6 +209,46 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT,
                 "CONCURRENT_UPDATE_CONFLICT",
                 "Inventory was modified by another request. Please retry.",
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleOrderNotFound(
+            OrderNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "ORDER_NOT_FOUND",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+    @ExceptionHandler(ReservationConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleReservationConflict(
+            ReservationConflictException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "RESERVATION_CONFLICT",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
+    @ExceptionHandler(CheckoutException.class)
+    public ResponseEntity<ApiErrorResponse> handleCheckoutException(
+            CheckoutException ex,
+            HttpServletRequest request
+    ) {
+
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "CHECKOUT_ERROR",
+                ex.getMessage(),
                 request.getRequestURI()
         );
     }

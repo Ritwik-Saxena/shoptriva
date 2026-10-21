@@ -1,3 +1,4 @@
+
 package com.shoptriva.auth.security;
 
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
+
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     @Bean
@@ -26,142 +29,191 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
+                // =====================================
+                // STATELESS JWT AUTHENTICATION
+                // =====================================
 
-                // JWT API → CSRF protection not required
                 .csrf(AbstractHttpConfigurer::disable)
-
-                // Disable Spring's default login page
                 .formLogin(AbstractHttpConfigurer::disable)
-
-                // Disable HTTP Basic authentication
                 .httpBasic(AbstractHttpConfigurer::disable)
 
-                // Do not create server-side sessions
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
 
-                // Custom JSON responses for 401 and 403
+                // =====================================
+                // CUSTOM 401 AND 403 ERROR HANDLING
+                // =====================================
+
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(authenticationEntryPoint)
-                        .accessDeniedHandler(accessDeniedHandler)
+                        .authenticationEntryPoint(
+                                authenticationEntryPoint
+                        )
+                        .accessDeniedHandler(
+                                accessDeniedHandler
+                        )
                 )
 
-                // Authorization rules
+                // =====================================
+                // ENDPOINT AUTHORIZATION RULES
+                // =====================================
+
                 .authorizeHttpRequests(auth -> auth
 
-                        // =====================================================
+                        // =====================================
                         // PUBLIC APIs
-                        // =====================================================
+                        // =====================================
 
-                        // Authentication APIs
-                        .requestMatchers(
-                                "/api/auth/**"
-                        ).permitAll()
+                        .requestMatchers("/api/auth/**")
+                        .permitAll()
 
-                        // Anyone can view products and categories
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).permitAll()
 
+                        // =====================================
+                        // ADMIN - CATALOG MANAGEMENT
+                        // =====================================
 
-                        // =====================================================
-                        // ADMIN - PRODUCT / CATEGORY MANAGEMENT
-                        // =====================================================
-
-                        // Create products/categories
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Update products/categories
                         .requestMatchers(
                                 HttpMethod.PUT,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
-                        // Delete products/categories
                         .requestMatchers(
                                 HttpMethod.DELETE,
+                                "/api/products",
                                 "/api/products/**",
+                                "/api/categories",
                                 "/api/categories/**"
                         ).hasRole("ADMIN")
 
+                        // Deny unsupported catalog operations
+                        .requestMatchers(
+                                "/api/products",
+                                "/api/products/**",
+                                "/api/categories",
+                                "/api/categories/**"
+                        ).denyAll()
 
-                        // =====================================================
+                        // =====================================
                         // ADMIN APIs
-                        // =====================================================
+                        // =====================================
+
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("ADMIN")
+
+                        // =====================================
+                        // CUSTOMER - CART
+                        // =====================================
 
                         .requestMatchers(
-                                "/api/admin/**"
-                        ).hasRole("ADMIN")
-
-
-                        // =====================================================
-                        // CUSTOMER APIs
-                        // =====================================================
-
-                        // Cart belongs only to customers
-                        .requestMatchers(
+                                "/api/cart",
                                 "/api/cart/**"
                         ).hasRole("CUSTOMER")
 
-                        // Wishlist belongs only to customers
+                        // =====================================
+                        // CUSTOMER - WISHLIST
+                        // =====================================
+
                         .requestMatchers(
+                                "/api/wishlist",
                                 "/api/wishlist/**"
                         ).hasRole("CUSTOMER")
 
+                        // =====================================
+                        // CUSTOMER - ORDERS
+                        // =====================================
 
-                        // =====================================================
-                        // INVENTORY APIs
-                        // =====================================================
-
-                        // CUSTOMER and ADMIN can view inventory
                         .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/inventory/**"
-                        ).hasAnyRole(
-                                "CUSTOMER",
-                                "ADMIN"
-                        )
+                                "/api/orders",
+                                "/api/orders/**"
+                        ).hasRole("CUSTOMER")
 
-                        // Only ADMIN can create inventory
+                        // =====================================
+                        // CUSTOMER - CHECKOUT
+                        // =====================================
+
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/checkout"
+                        ).hasRole("CUSTOMER")
+
+                        // Reject other checkout operations
+                        .requestMatchers(
+                                "/api/checkout",
+                                "/api/checkout/**"
+                        ).denyAll()
+
+                        // =====================================
+                        // INVENTORY - READ
+                        // CUSTOMER + ADMIN
+                        // =====================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/inventory",
+                                "/api/inventory/**"
+                        ).hasAnyRole("CUSTOMER", "ADMIN")
+
+                        // =====================================
+                        // INVENTORY - WRITE
+                        // ADMIN ONLY
+                        // =====================================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
-                        // Only ADMIN can set exact stock
                         .requestMatchers(
                                 HttpMethod.PUT,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
-                        // Only ADMIN can increase/decrease stock
                         .requestMatchers(
                                 HttpMethod.PATCH,
+                                "/api/inventory",
                                 "/api/inventory/**"
                         ).hasRole("ADMIN")
 
+                        // Reject all other inventory operations
+                        .requestMatchers(
+                                "/api/inventory",
+                                "/api/inventory/**"
+                        ).denyAll()
 
-                        // =====================================================
-                        // FALLBACK
-                        // =====================================================
+                        // =====================================
+                        // FALLBACK - AUTHENTICATED USERS
+                        // =====================================
 
-                        // Any endpoint not matched above requires authentication
                         .anyRequest()
                         .authenticated()
                 )
 
-                // JWT authentication must run before Spring's
-                // username/password authentication filter
+                // =====================================
+                // JWT FILTER
+                // =====================================
+
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
